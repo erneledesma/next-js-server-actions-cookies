@@ -142,6 +142,61 @@ export function CookieManager({ initialCookies }: CookieManagerProps) {
     }
   }
 
+  /**
+   * Determina si una cookie contiene información sensible
+   * y debe ser ocultada de la interfaz de usuario
+   *
+   * @param name - Nombre de la cookie
+   * @returns true si la cookie es sensible, false en caso contrario
+   *
+   * Cookies sensibles que se ocultan:
+   * - JWT tokens (_vercel_jwt, auth_token, etc)
+   * - Session tokens
+   * - API keys y credenciales
+   */
+  const isSensitiveCookie = (name: string): boolean => {
+    const sensitivePrefixes = [
+      "_vercel_jwt",
+      "_vercel",
+      "auth_token",
+      "session",
+      "jwt",
+      "token",
+      "api_key",
+      "secret",
+      "credential",
+    ]
+    return sensitivePrefixes.some((prefix) => name.toLowerCase().includes(prefix.toLowerCase()))
+  }
+
+  /**
+   * Obtiene una representación segura del valor de la cookie
+   *
+   * @param name - Nombre de la cookie
+   * @param value - Valor de la cookie
+   * @returns El valor original o una versión enmascarada si es sensible
+   *
+   * Para cookies sensibles, muestra:
+   * - Primeros 10 caracteres
+   * - "..." en el medio
+   * - Último carácter
+   * - Longitud total entre paréntesis
+   */
+  const getSafeCookieValue = (name: string, value: string): string => {
+    if (!isSensitiveCookie(name)) {
+      return value
+    }
+
+    // Para tokens sensibles, mostrar solo información básica
+    if (value.length > 20) {
+      const start = value.substring(0, 10)
+      const end = value.substring(value.length - 1)
+      return `${start}...${end} (${value.length} caracteres)`
+    }
+
+    return "***" + value.substring(0, 3).padEnd(value.length, "*")
+  }
+
   return (
     <div className="space-y-6">
       {/* Card para crear nuevas cookies */}
@@ -195,25 +250,47 @@ export function CookieManager({ initialCookies }: CookieManagerProps) {
           ) : (
             // Lista de cookies con opción de eliminar
             <div className="space-y-2">
-              {initialCookies.map((cookie) => (
-                <div key={cookie.name} className="flex items-center justify-between rounded-lg border p-3">
-                  {/* Información de la cookie */}
-                  <div className="space-y-1">
-                    <p className="font-medium text-sm">{cookie.name}</p>
-                    <p className="text-muted-foreground text-xs">{cookie.value}</p>
-                  </div>
+              {initialCookies.map((cookie) => {
+                const isSensitive = isSensitiveCookie(cookie.name)
+                const displayValue = getSafeCookieValue(cookie.name, cookie.value)
 
-                  {/* Botón para eliminar la cookie */}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDeleteCookie(cookie.name)}
-                    disabled={isLoading}
+                return (
+                  <div
+                    key={cookie.name}
+                    className={`flex items-center justify-between rounded-lg border p-3 ${isSensitive ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" : ""}`}
                   >
-                    Eliminar
-                  </Button>
-                </div>
-              ))}
+                    {/* Información de la cookie */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{cookie.name}</p>
+                        {isSensitive && (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                            Sensible
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-xs ${isSensitive ? "text-amber-700 dark:text-amber-300 font-mono" : "text-muted-foreground"}`}>
+                        {displayValue}
+                      </p>
+                      {isSensitive && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 italic">
+                          Este token está protegido. No se muestra el valor completo por seguridad.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Botón para eliminar la cookie */}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteCookie(cookie.name)}
+                      disabled={isLoading}
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
