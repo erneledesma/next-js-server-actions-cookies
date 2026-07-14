@@ -1,5 +1,56 @@
 # Guía de Seguridad - Next.js Server Actions Demo
 
+## ⚠️ CRÍTICO: Exposición de JWT en la Interfaz - CORREGIDO
+
+### El Problema
+En la captura de pantalla que compartiste, el JWT de Vercel (`_vercel_jwt`) estaba completamente visible:
+
+```
+_vercel_jwt
+eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+```
+
+Esto es un **problema de seguridad crítico** porque:
+
+1. **Exposición de información**: Los JWTs contienen datos codificados (claims) que pueden ser decodificados
+2. **Riesgo de XSS**: Si hay una vulnerabilidad Cross-Site Scripting, el atacante puede extraer y usar el token
+3. **Suplantación de identidad**: El token puede ser usado para suplantar la sesión del usuario
+4. **Violación de cumplimiento**: Viola OWASP Top 10, SOC 2, ISO 27001, PCI DSS
+
+### La Solución ✅ IMPLEMENTADA
+
+El componente `CookieManager` ahora:
+- **Detecta** cookies sensibles automáticamente (`_vercel_jwt`, `auth_token`, `session`, etc.)
+- **Oculta** el valor completo, mostrando solo: `eyJ0eXAiOi...] (298 caracteres)`
+- **Marca** visualmente con un badge rojo "Sensible"
+- **Advierte** al usuario: "Este token está protegido. No se muestra el valor completo por seguridad."
+
+### Código Implementado
+
+```typescript
+// Detectar si una cookie es sensible
+const isSensitiveCookie = (name: string): boolean => {
+  const sensitivePrefixes = [
+    "_vercel_jwt", "auth_token", "session", "jwt", "token",
+    "api_key", "secret", "credential"
+  ]
+  return sensitivePrefixes.some(prefix => 
+    name.toLowerCase().includes(prefix.toLowerCase())
+  )
+}
+
+// Enmascarar el valor
+const getSafeCookieValue = (name: string, value: string): string => {
+  if (!isSensitiveCookie(name)) return value
+  if (value.length > 20) {
+    return `${value.substring(0, 10)}...${value.substring(value.length - 1)} (${value.length} caracteres)`
+  }
+  return "***" + value.substring(0, 3).padEnd(value.length, "*")
+}
+```
+
+---
+
 ## Vulnerabilidades Identificadas y Corregidas
 
 ### Contexto
@@ -38,35 +89,35 @@ Este proyecto fue actualizado debido a vulnerabilidades críticas encontradas en
 ## Cambios Realizados
 
 ### Archivo: `package.json`
-```diff
+\`\`\`diff
 - "next": "16.0.0",
 + "next": "16.2.5",
-```
+\`\`\`
 
 ### Pasos para aplicar las correcciones:
 
 1. **Eliminar lockfile e instalar dependencias nuevamente**
-   ```bash
+   \`\`\`bash
    rm -rf pnpm-lock.yaml node_modules
    pnpm install
-   ```
+   \`\`\`
 
 2. **Verificar la versión instalada**
-   ```bash
+   \`\`\`bash
    pnpm list next
-   ```
+   \`\`\`
 
 3. **Realizar un build local**
-   ```bash
+   \`\`\`bash
    pnpm build
-   ```
+   \`\`\`
 
 4. **Deployar en Vercel**
-   ```bash
+   \`\`\`bash
    git add -A
    git commit -m "chore: update Next.js to 16.2.5 (fix security vulnerabilities)"
    git push origin main
-   ```
+   \`\`\`
 
 ---
 
@@ -78,7 +129,7 @@ Este proyecto fue actualizado debido a vulnerabilidades críticas encontradas en
 
 ### 2. **Validación de Cookies**
 En `app/actions/cookie-actions.ts`:
-```typescript
+\`\`\`typescript
 // ✅ CORRECTO: Usar 'use server' directiva
 'use server'
 
@@ -94,19 +145,19 @@ export async function setCookie(name: string, value: string) {
     maxAge: 60 * 60 * 24 // ✅ 24 horas
   })
 }
-```
+\`\`\`
 
 ### 3. **Validación de Entrada**
-```typescript
+\`\`\`typescript
 // ✅ CORRECTO: Validar nombres de cookies
 const validCookieNames = /^[a-zA-Z0-9_-]+$/
 if (!validCookieNames.test(name)) {
   throw new Error('Invalid cookie name')
 }
-```
+\`\`\`
 
 ### 4. **Sanitización de Valores**
-```typescript
+\`\`\`typescript
 // ✅ CORRECTO: Evitar inyección de valores
 export async function getCookie(name: string) {
   if (!name || name.length > 50) {
@@ -115,29 +166,29 @@ export async function getCookie(name: string) {
   const cookieStore = await cookies()
   return cookieStore.get(name)?.value || null
 }
-```
+\`\`\`
 
 ---
 
 ## Testing de Seguridad
 
 ### Verificar que CSRF está protegido:
-```bash
+\`\`\`bash
 # El siguiente comando debe fallar con origen null
 curl -X POST http://localhost:3000/api/action \
   -H "Origin: null" \
   -H "Content-Type: application/json"
-```
+\`\`\`
 
 ### Verificar cookies seguras:
-```bash
+\`\`\`bash
 pnpm dev
 # En DevTools > Application > Cookies
 # Debería mostrar:
 # - HttpOnly: ✓ (no accesible desde JavaScript)
 # - Secure: ✓ (solo HTTPS en producción)
 # - SameSite: Strict
-```
+\`\`\`
 
 ---
 
@@ -148,13 +199,13 @@ pnpm dev
 - Usar herramientas como Dependabot
 
 ### 2. **Auditoría Regular**
-```bash
+\`\`\`bash
 # Auditar vulnerabilidades
 pnpm audit
 
 # Auditar solo vulnerabilidades críticas
 pnpm audit --severity=high
-```
+\`\`\`
 
 ### 3. **Configuración de Vercel**
 - Habilitar "Automatic Security Updates" en Settings
